@@ -7,18 +7,16 @@ A Python FastAPI web app that wraps and demonstrates every feature of [go-llm-ga
 - Python 3.9+
 - [go-llm-gateway](../go-llm-gateway) running on `http://localhost:8080`
 
-## Setup
+## Quick start
 
 ```bash
+# Python 3.11+ required
 pip install -r requirements.txt
-cp .env.example .env
-```
 
-Edit `.env` if your gateway runs on a different address.
+cp .env.example .env   # fill in your values
 
-## Run
+pre-commit install     # activate git hooks (auto-format + credential scanning)
 
-```bash
 uvicorn main:app --reload --port 3000
 ```
 
@@ -58,3 +56,16 @@ Open [http://localhost:3000](http://localhost:3000).
 | `GATEWAY_URL` | `http://localhost:8080` | go-llm-gateway base URL |
 | `HOST` | `0.0.0.0` | Bind address (used when running directly) |
 | `PORT` | `3000` | Port (used when running directly) |
+
+## Development
+
+Pre-commit hooks run automatically on every `git commit`:
+
+| Hook | Action |
+|------|--------|
+| `ruff` | Lint and auto-fix Python |
+| `ruff-format` | Auto-format Python in place |
+| `gitleaks` | Block commits containing credentials or high-entropy secrets |
+| `detect-private-key` | Block PEM private keys |
+
+Run `pre-commit install` once after cloning. If a commit is blocked due to formatting changes, re-stage the modified files and commit again.
