@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Gateway UI</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #333;
+      --text: #e8e8e8;
+      --text-muted: #888;
+      --accent: #5b9cf6;
+      --accent-hover: #7ab3ff;
+      --user-bg: #2a3a5e;
+      --assistant-bg: #1e2a1e;
+      --error: #ff5555;
+      --green: #50fa7b;
+      --yellow: #f1fa8c;
+      --red: #ff5555;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+
+    #app { display: flex; height: 100vh; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 260px; min-width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 16px 12px;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    #sidebar h1 { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: 0.5px; }
+
+    .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+    .sidebar-section label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
+
+    select, textarea, input[type=range] { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+    select:focus, textarea:focus { outline: 1px solid var(--accent); }
+    select option { background: var(--surface2); }
+
+    .range-row { display: flex; align-items: center; gap: 8px; }
+    .range-row input { flex: 1; accent-color: var(--accent); }
+    .range-val { min-width: 38px; text-align: right; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+    #system-prompt { resize: vertical; min-height: 80px; font-family: inherit; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: #5a1a1a; color: var(--red); border: 1px solid var(--red); }
+    .btn-danger:hover { background: #7a2a2a; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* Health */
+    #health-panel { display: flex; flex-direction: column; gap: 6px; }
+    .health-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+    .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.warn { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .health-label { flex: 1; color: var(--text-muted); }
+    .health-status { font-size: 11px; color: var(--text-muted); }
+
+    /* ── Chat area ── */
+    #chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    #messages {
+      flex: 1; overflow-y: auto; padding: 24px 16px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    .msg { display: flex; gap: 12px; max-width: 860px; width: 100%; }
+    .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+    .msg.assistant { align-self: flex-start; }
+
+    .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; font-weight: 700; }
+    .msg.user .avatar { background: var(--user-bg); color: #a8c8ff; }
+    .msg.assistant .avatar { background: var(--assistant-bg); color: #90d490; }
+
+    .bubble { padding: 12px 16px; border-radius: 12px; line-height: 1.6; max-width: calc(100% - 52px); position: relative; }
+    .msg.user .bubble { background: var(--user-bg); border-bottom-right-radius: 4px; }
+    .msg.assistant .bubble { background: var(--assistant-bg); border-bottom-left-radius: 4px; }
+    .msg.error .bubble { background: #2a1010; border: 1px solid var(--red); color: var(--red); }
+
+    /* Markdown in bubbles */
+    .bubble p { margin-bottom: 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble pre { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+    .bubble code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 13px; }
+    .bubble :not(pre) > code { background: #0d1117; padding: 2px 5px; border-radius: 4px; }
+    .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+    .bubble li { margin: 3px 0; }
+    .bubble h1, .bubble h2, .bubble h3 { margin: 10px 0 5px; }
+    .bubble a { color: var(--accent); }
+
+    /* Copy button */
+    .copy-btn { position: absolute; top: 8px; right: 8px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+    .msg.assistant .bubble:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { color: var(--text); }
+
+    /* Cursor blink */
+    .cursor { display: inline-block; width: 2px; height: 1em; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 2px; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Usage */
+    .usage { font-size: 11px; color: var(--text-muted); margin-top: 6px; display: flex; gap: 10px; }
+    .usage span { background: var(--surface2); padding: 2px 6px; border-radius: 4px; }
+
+    /* ── Input bar ── */
+    #input-bar {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex; gap: 8px; align-items: flex-end;
+      background: var(--surface);
+    }
+
+    #msg-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px; padding: 10px 14px;
+      font-size: 14px; font-family: inherit; resize: none;
+      min-height: 44px; max-height: 200px; overflow-y: auto; line-height: 1.5;
+    }
+    #msg-input:focus { outline: 1px solid var(--accent); }
+
+    #stream-toggle { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--text-muted); font-size: 12px; cursor: pointer; padding-bottom: 10px; }
+    #stream-toggle input { accent-color: var(--accent); cursor: pointer; }
+
+    #send-btn { padding: 10px 18px; }
+    #stop-btn { display: none; }
+
+    /* Empty state */
+    #empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; color: var(--text-muted); gap: 8px; }
+    #empty-state h2 { font-size: 20px; color: var(--text); }
+    #empty-state p { font-size: 13px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h1>⚡ LLM Gateway</h1>
+
+    <div class="sidebar-section">
+      <label>Model</label>
+      <select id="model-select"><option value="">Loading models…</option></select>
+    </div>
+
+    <div class="sidebar-section">
+      <label>Temperature</label>
+      <div class="range-row">
+        <input type="range" id="temp" min="0" max="2" step="0.05" value="0.7" />
+        <span class="range-val" id="temp-val">0.7</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <label>Max Tokens</label>
+      <div class="range-row">
+        <input type="range" id="max-tokens" min="64" max="4096" step="64" value="512" />
+        <span class="range-val" id="tokens-val">512</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <label>System Prompt</label>
+      <textarea id="system-prompt" placeholder="Optional system instructions…"></textarea>
+    </div>
+
+    <button class="btn btn-secondary" id="new-chat-btn" style="width:100%">+ New Conversation</button>
+
+    <div style="flex:1"></div>
+
+    <div class="sidebar-section">
+      <label>Health</label>
+      <div id="health-panel">
+        <div class="health-row">
+          <div class="dot" id="dot-gateway"></div>
+          <span class="health-label">Gateway</span>
+          <span class="health-status" id="status-gateway">—</span>
+        </div>
+        <div id="provider-dots"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat area -->
+  <div id="chat-area">
+    <div id="messages">
+      <div id="empty-state">
+        <h2>LLM Gateway</h2>
+        <p>Select a model and send a message to start chatting.</p>
+      </div>
+    </div>
+
+    <div id="input-bar">
+      <label id="stream-toggle" title="Toggle streaming">
+        <input type="checkbox" id="stream-check" checked /> Stream
+      </label>
+      <textarea id="msg-input" placeholder="Send a message… (Enter to send, Shift+Enter for newline)" rows="1"></textarea>
+      <button class="btn btn-primary" id="send-btn">Send</button>
+      <button class="btn btn-danger" id="stop-btn">Stop</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let messages = [];
+  let abortController = null;
+
+  const modelSelect = document.getElementById('model-select');
+  const tempSlider  = document.getElementById('temp');
+  const tempVal     = document.getElementById('temp-val');
+  const tokensSlider = document.getElementById('max-tokens');
+  const tokensVal   = document.getElementById('tokens-val');
+  const systemPrompt = document.getElementById('system-prompt');
+  const msgInput    = document.getElementById('msg-input');
+  const sendBtn     = document.getElementById('send-btn');
+  const stopBtn     = document.getElementById('stop-btn');
+  const newChatBtn  = document.getElementById('new-chat-btn');
+  const streamCheck = document.getElementById('stream-check');
+  const messagesEl  = document.getElementById('messages');
+  const emptyState  = document.getElementById('empty-state');
+
+  // ── Sliders ─────────────────────────────────────────────────────────────────
+  tempSlider.addEventListener('input', () => { tempVal.textContent = parseFloat(tempSlider.value).toFixed(2); });
+  tokensSlider.addEventListener('input', () => { tokensVal.textContent = tokensSlider.value; });
+
+  // ── Models ──────────────────────────────────────────────────────────────────
+  async function loadModels() {
+    try {
+      const res = await fetch('/api/models');
+      const data = await res.json();
+      const models = data.data || [];
+
+      // Group by owned_by
+      const groups = {};
+      for (const m of models) {
+        const g = m.owned_by || 'other';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(m);
+      }
+
+      modelSelect.innerHTML = '';
+      if (models.length === 0) {
+        modelSelect.innerHTML = '<option value="">No models available</option>';
+        return;
+      }
+
+      for (const [group, mlist] of Object.entries(groups)) {
+        const og = document.createElement('optgroup');
+        og.label = group;
+        for (const m of mlist) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.id;
+          og.appendChild(opt);
+        }
+        modelSelect.appendChild(og);
+      }
+    } catch (e) {
+      modelSelect.innerHTML = '<option value="">Failed to load models</option>';
+    }
+  }
+
+  // ── Health polling ───────────────────────────────────────────────────────────
+  async function pollHealth() {
+    // Liveness
+    try {
+      const res = await fetch('/api/health');
+      const dot = document.getElementById('dot-gateway');
+      const st  = document.getElementById('status-gateway');
+      if (res.ok) { dot.className = 'dot ok'; st.textContent = 'ok'; }
+      else        { dot.className = 'dot err'; st.textContent = res.status; }
+    } catch {
+      document.getElementById('dot-gateway').className = 'dot err';
+      document.getElementById('status-gateway').textContent = 'offline';
+    }
+
+    // Readiness / providers
+    try {
+      const res = await fetch('/api/ready');
+      const data = await res.json();
+      const container = document.getElementById('provider-dots');
+      container.innerHTML = '';
+
+      // data may be { status, providers: {name: {available, ...}} }
+      const providers = data.providers || {};
+      for (const [name, info] of Object.entries(providers)) {
+        const row = document.createElement('div');
+        row.className = 'health-row';
+        const dot = document.createElement('div');
+        const available = info.available !== false;
+        dot.className = 'dot ' + (available ? 'ok' : 'err');
+        const label = document.createElement('span');
+        label.className = 'health-label';
+        label.textContent = name;
+        const status = document.createElement('span');
+        status.className = 'health-status';
+        status.textContent = available ? 'ok' : (info.error || 'unavailable');
+        row.appendChild(dot);
+        row.appendChild(label);
+        row.appendChild(status);
+        container.appendChild(row);
+      }
+
+      // If no providers key, just show overall status
+      if (Object.keys(providers).length === 0 && data.status) {
+        const row = document.createElement('div');
+        row.className = 'health-row';
+        const dot = document.createElement('div');
+        dot.className = 'dot ' + (res.ok ? 'ok' : 'warn');
+        const label = document.createElement('span');
+        label.className = 'health-label';
+        label.textContent = data.status;
+        row.appendChild(dot);
+        row.appendChild(label);
+        container.appendChild(row);
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  // ── Rendering ────────────────────────────────────────────────────────────────
+  function renderMarkdown(text) {
+    if (typeof marked !== 'undefined') {
+      return marked.parse(text, { breaks: true, gfm: true });
+    }
+    // Fallback: escape HTML, wrap code blocks
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/```[\s\S]*?```/g, m => `<pre><code>${m.slice(3,-3).replace(/^\w+\n/, '')}</code></pre>`)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
+  }
+
+  function showEmptyState(show) {
+    emptyState.style.display = show ? 'flex' : 'none';
+  }
+
+  function appendMessage(role, content, usage) {
+    showEmptyState(false);
+
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = role === 'user' ? 'U' : role === 'assistant' ? 'A' : '!';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    if (role === 'assistant' || role === 'error') {
+      bubble.innerHTML = role === 'error' ? escapeHtml(content) : renderMarkdown(content);
+    } else {
+      bubble.textContent = content;
+    }
+
+    if (role === 'assistant') {
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(content).then(() => {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        });
+      });
+      bubble.appendChild(copyBtn);
+
+      if (usage) {
+        const usageEl = document.createElement('div');
+        usageEl.className = 'usage';
+        usageEl.innerHTML = `
+          <span>prompt: ${usage.prompt_tokens ?? '—'}</span>
+          <span>completion: ${usage.completion_tokens ?? '—'}</span>
+          <span>total: ${usage.total_tokens ?? '—'}</span>`;
+        bubble.appendChild(usageEl);
+      }
+    }
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return bubble;
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Chat ─────────────────────────────────────────────────────────────────────
+  function buildPayload(stream) {
+    const model = modelSelect.value;
+    const sys = systemPrompt.value.trim();
+    const msgs = sys
+      ? [{ role: 'system', content: sys }, ...messages]
+      : [...messages];
+
+    return {
+      model,
+      messages: msgs,
+      temperature: parseFloat(tempSlider.value),
+      max_tokens: parseInt(tokensSlider.value, 10),
+      stream,
+    };
+  }
+
+  async function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    if (!modelSelect.value) { alert('Please select a model first.'); return; }
+
+    msgInput.value = '';
+    resizeTextarea();
+
+    messages.push({ role: 'user', content: text });
+    appendMessage('user', text);
+
+    sendBtn.disabled = true;
+    sendBtn.style.display = 'none';
+    stopBtn.style.display = '';
+
+    abortController = new AbortController();
+    const streaming = streamCheck.checked;
+
+    try {
+      if (streaming) {
+        await sendStreaming();
+      } else {
+        await sendNonStreaming();
+      }
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.style.display = '';
+      stopBtn.style.display = 'none';
+      abortController = null;
+    }
+  }
+
+  async function sendNonStreaming() {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload(false)),
+        signal: abortController.signal,
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        const errMsg = data.error?.message || data.error || JSON.stringify(data);
+        appendMessage('error', errMsg);
+        return;
+      }
+
+      const content = data.choices?.[0]?.message?.content ?? '';
+      messages.push({ role: 'assistant', content });
+      appendMessage('assistant', content, data.usage);
+    } catch (e) {
+      if (e.name !== 'AbortError') appendMessage('error', String(e));
+    }
+  }
+
+  async function sendStreaming() {
+    showEmptyState(false);
+    const div = document.createElement('div');
+    div.className = 'msg assistant';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = 'A';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    bubble.appendChild(cursor);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = 'Copy';
+    bubble.appendChild(copyBtn);
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    scrollToBottom();
+
+    let accumulated = '';
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload(true)),
+        signal: abortController.signal,
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const raw = line.slice(5).trim();
+          if (raw === '[DONE]') break;
+          try {
+            const chunk = JSON.parse(raw);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) {
+              accumulated += delta;
+              // Re-render markdown but keep cursor
+              bubble.innerHTML = renderMarkdown(accumulated);
+              bubble.appendChild(cursor);
+              bubble.appendChild(copyBtn);
+              scrollToBottom();
+            }
+          } catch {
+            // ignore parse errors mid-stream
+          }
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        // stopped by user — keep what we have
+      } else {
+        bubble.innerHTML = `<span style="color:var(--red)">${escapeHtml(String(e))}</span>`;
+        return;
+      }
+    }
+
+    // Finalize
+    cursor.remove();
+    if (accumulated) {
+      bubble.innerHTML = renderMarkdown(accumulated);
+      bubble.appendChild(copyBtn);
+      messages.push({ role: 'assistant', content: accumulated });
+    } else if (!accumulated) {
+      bubble.textContent = '(no response)';
+    }
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(accumulated).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      });
+    });
+
+    scrollToBottom();
+  }
+
+  // ── Input auto-resize ────────────────────────────────────────────────────────
+  function resizeTextarea() {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 200) + 'px';
+  }
+
+  msgInput.addEventListener('input', resizeTextarea);
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!sendBtn.disabled) sendMessage();
+    }
+  });
+
+  // ── Buttons ──────────────────────────────────────────────────────────────────
+  sendBtn.addEventListener('click', sendMessage);
+
+  stopBtn.addEventListener('click', () => {
+    if (abortController) {
+      abortController.abort();
+      stopBtn.style.display = 'none';
+      sendBtn.disabled = false;
+      sendBtn.style.display = '';
+    }
+  });
+
+  newChatBtn.addEventListener('click', () => {
+    messages = [];
+    messagesEl.innerHTML = '';
+    messagesEl.appendChild(emptyState);
+    showEmptyState(true);
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  loadModels();
+  pollHealth();
+  setInterval(pollHealth, 10_000);
+</script>
+</body>
+</html>
