@@ -11,6 +11,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.eggs/
+pip-wheel-metadata/
 
 # Virtual environments
 .venv/
@@ -19,6 +21,7 @@ env/
 ENV/
 
 # Runtime files
+data/
 logs/
 *.log
 
@@ -29,6 +32,7 @@ htmlcov/
 
 # Type checking
 .mypy_cache/
+.pytype/
 
 # Ruff cache
 .ruff_cache/

@@ -4,7 +4,7 @@ A Python FastAPI web app that wraps and demonstrates every feature of [go-llm-ga
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.11+
 - [go-llm-gateway](../go-llm-gateway) running on `http://localhost:8080`
 
 ## Quick start
