@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import os
 from contextlib import asynccontextmanager
 
 import httpx
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -10,13 +13,18 @@ from fastapi.staticfiles import StaticFiles
 load_dotenv()
 
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:8080")
+HOST = os.getenv("HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", "3000"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.client = httpx.AsyncClient(timeout=120.0)
-    yield
-    await app.state.client.aclose()
+    try:
+        yield
+    finally:
+        await app.state.client.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -80,3 +88,9 @@ async def chat(request: Request):
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+if __name__ == "__main__":
+    try:
+        uvicorn.run("main:app", host=HOST, port=PORT, log_level=LOG_LEVEL)
+    except KeyboardInterrupt:
+        pass

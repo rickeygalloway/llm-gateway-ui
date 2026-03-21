@@ -69,3 +69,17 @@ Pre-commit hooks run automatically on every `git commit`:
 | `detect-private-key` | Block PEM private keys |
 
 Run `pre-commit install` once after cloning. If a commit is blocked due to formatting changes, re-stage the modified files and commit again.
+
+## Debug mode
+
+Set `LOG_LEVEL=debug` to enable verbose logging:
+
+```bash
+LOG_LEVEL=debug uvicorn main:app --reload --port 3000
+```
+
+Or add it to your `.env` file:
+
+```
+LOG_LEVEL=debug
+```
