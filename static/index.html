@@ -31,7 +31,7 @@
 
     /* ── Sidebar ── */
     #sidebar {
-      width: 260px; min-width: 260px;
+      width: 300px; min-width: 300px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
@@ -265,18 +265,28 @@
       const data = await res.json();
       const models = data.data || [];
 
-      // Group by owned_by
-      const groups = {};
-      for (const m of models) {
-        const g = m.owned_by || 'other';
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(m);
-      }
-
       modelSelect.innerHTML = '';
       if (models.length === 0) {
         modelSelect.innerHTML = '<option value="">No models available</option>';
         return;
+      }
+
+      // Pin "auto" to the top, then group the rest by owned_by
+      const autoModel = models.find(m => m.id === 'auto');
+      if (autoModel) {
+        const opt = document.createElement('option');
+        opt.value = 'auto';
+        opt.textContent = '⚡ Auto — gateway picks best model';
+        opt.selected = true;
+        modelSelect.appendChild(opt);
+      }
+
+      const groups = {};
+      for (const m of models) {
+        if (m.id === 'auto') continue;
+        const g = m.owned_by || 'other';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(m);
       }
 
       for (const [group, mlist] of Object.entries(groups)) {
