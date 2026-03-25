@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from contextlib import asynccontextmanager
 
 import httpx
@@ -90,6 +92,8 @@ async def chat(request: Request):
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
         uvicorn.run("main:app", host=HOST, port=PORT, log_level=LOG_LEVEL)
     except KeyboardInterrupt:

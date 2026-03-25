@@ -1,11 +1,25 @@
 # LLM Gateway UI
 
-A Python FastAPI web app that wraps and demonstrates every feature of [go-llm-gateway](../go-llm-gateway). Provides a ChatGPT-style chat interface with streaming, provider health monitoring, and full model control.
+A Python FastAPI web app that wraps and demonstrates every feature of [go-llm-gateway](https://github.com/rickeygalloway/go-llm-gateway). Provides a ChatGPT-style chat interface with streaming, provider health monitoring, and full model control.
 
 ## Prerequisites
 
-- Python 3.11+
-- [go-llm-gateway](../go-llm-gateway) running on `http://localhost:8080`
+### 1. go-llm-gateway
+
+This UI is a frontend for [go-llm-gateway](https://github.com/rickeygalloway/go-llm-gateway) — a Go reverse proxy that normalises requests across LLM providers (OpenAI, Anthropic, DeepSeek, etc.) into a single OpenAI-compatible API.
+
+You must have it running before starting this UI. Quick setup:
+
+```bash
+git clone https://github.com/rickeygalloway/go-llm-gateway
+cd go-llm-gateway
+# configure your provider API keys per its README
+go run .   # starts on http://localhost:8080 by default
+```
+
+See the [go-llm-gateway README](https://github.com/rickeygalloway/go-llm-gateway) for full configuration, including how to add provider API keys.
+
+### 2. Python 3.11+
 
 ## Quick start
 

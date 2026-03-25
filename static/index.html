@@ -44,6 +44,9 @@
 
     .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
     .sidebar-section label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
+    .sidebar-section label[data-tip] { cursor: help; border-bottom: 1px dashed var(--border); width: fit-content; position: relative; }
+    .sidebar-section label[data-tip]::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 0; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 11px; line-height: 1.5; padding: 6px 8px; border-radius: 6px; width: 210px; white-space: normal; text-transform: none; letter-spacing: normal; font-weight: normal; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 100; }
+    .sidebar-section label[data-tip]:hover::after { opacity: 1; }
 
     select, textarea, input[type=range] { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
     select:focus, textarea:focus { outline: 1px solid var(--accent); }
@@ -146,6 +149,15 @@
     #empty-state h2 { font-size: 20px; color: var(--text); }
     #empty-state p { font-size: 13px; }
 
+    /* Thinking block (DeepSeek R1 reasoning) */
+    .thinking-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+    .thinking-block summary { padding: 5px 10px; font-size: 12px; color: var(--text-muted); cursor: pointer; user-select: none; list-style: none; }
+    .thinking-block summary::-webkit-details-marker { display: none; }
+    .thinking-block[open] summary { border-bottom: 1px solid var(--border); }
+    .thinking-body { padding: 8px 10px; font-size: 12px; color: var(--text-muted); font-style: italic; line-height: 1.5; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .thinking-spinner { display: inline-block; animation: spin 1.2s linear infinite; }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -165,7 +177,7 @@
     </div>
 
     <div class="sidebar-section">
-      <label>Temperature</label>
+      <label data-tip="Controls randomness. Lower = more focused and deterministic. Higher = more creative and varied. (0–2)">Temperature</label>
       <div class="range-row">
         <input type="range" id="temp" min="0" max="2" step="0.05" value="0.7" />
         <span class="range-val" id="temp-val">0.7</span>
@@ -173,7 +185,7 @@
     </div>
 
     <div class="sidebar-section">
-      <label>Max Tokens</label>
+      <label data-tip="Maximum number of tokens the model can generate in its response. Higher values allow longer answers but cost more.">Max Tokens</label>
       <div class="range-row">
         <input type="range" id="max-tokens" min="64" max="4096" step="64" value="512" />
         <span class="range-val" id="tokens-val">512</span>
@@ -181,7 +193,7 @@
     </div>
 
     <div class="sidebar-section">
-      <label>System Prompt</label>
+      <label data-tip="Instructions given to the model before the conversation begins. Use this to set its persona, tone, or task context.">System Prompt</label>
       <textarea id="system-prompt" placeholder="Optional system instructions…"></textarea>
     </div>
 
@@ -501,21 +513,29 @@
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
+    // Separate container for main content so thinking block is never clobbered
+    const contentDiv = document.createElement('div');
+
     const cursor = document.createElement('span');
     cursor.className = 'cursor';
-    bubble.appendChild(cursor);
 
     const copyBtn = document.createElement('button');
     copyBtn.className = 'copy-btn';
     copyBtn.textContent = 'Copy';
-    bubble.appendChild(copyBtn);
 
+    bubble.appendChild(contentDiv);
+    bubble.appendChild(cursor);
+    bubble.appendChild(copyBtn);
     div.appendChild(avatar);
     div.appendChild(bubble);
     messagesEl.appendChild(div);
     scrollToBottom();
 
     let accumulated = '';
+    let accumulatedReasoning = '';
+    let thinkingEl = null;
+    let thinkingSummary = null;
+    let thinkingBody = null;
 
     try {
       const res = await fetch('/api/chat', {
@@ -535,7 +555,7 @@
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line
+        buffer = lines.pop();
 
         for (const line of lines) {
           if (!line.startsWith('data:')) continue;
@@ -543,13 +563,35 @@
           if (raw === '[DONE]') break;
           try {
             const chunk = JSON.parse(raw);
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-              accumulated += delta;
-              // Re-render markdown but keep cursor
-              bubble.innerHTML = renderMarkdown(accumulated);
-              bubble.appendChild(cursor);
-              bubble.appendChild(copyBtn);
+            const reasoningDelta = chunk.choices?.[0]?.delta?.reasoning_content;
+            const contentDelta = chunk.choices?.[0]?.delta?.content;
+
+            if (reasoningDelta) {
+              if (!thinkingEl) {
+                thinkingEl = document.createElement('details');
+                thinkingEl.className = 'thinking-block';
+                thinkingEl.open = true;
+                thinkingSummary = document.createElement('summary');
+                thinkingSummary.innerHTML = '<span class="thinking-spinner">⟳</span> Thinking…';
+                thinkingBody = document.createElement('div');
+                thinkingBody.className = 'thinking-body';
+                thinkingEl.appendChild(thinkingSummary);
+                thinkingEl.appendChild(thinkingBody);
+                bubble.insertBefore(thinkingEl, contentDiv);
+              }
+              accumulatedReasoning += reasoningDelta;
+              thinkingBody.textContent = accumulatedReasoning;
+              scrollToBottom();
+            }
+
+            if (contentDelta) {
+              // Collapse thinking block when the answer starts arriving
+              if (thinkingEl && thinkingEl.open) {
+                thinkingEl.open = false;
+                thinkingSummary.innerHTML = '▶ Show reasoning';
+              }
+              accumulated += contentDelta;
+              contentDiv.innerHTML = renderMarkdown(accumulated);
               scrollToBottom();
             }
           } catch {
@@ -561,19 +603,22 @@
       if (e.name === 'AbortError') {
         // stopped by user — keep what we have
       } else {
-        bubble.innerHTML = `<span style="color:var(--red)">${escapeHtml(String(e))}</span>`;
+        contentDiv.innerHTML = `<span style="color:var(--red)">${escapeHtml(String(e))}</span>`;
         return;
       }
     }
 
     // Finalize
     cursor.remove();
+    if (thinkingEl) {
+      thinkingEl.open = false;
+      thinkingSummary.innerHTML = '▶ Show reasoning';
+    }
     if (accumulated) {
-      bubble.innerHTML = renderMarkdown(accumulated);
-      bubble.appendChild(copyBtn);
+      contentDiv.innerHTML = renderMarkdown(accumulated);
       messages.push({ role: 'assistant', content: accumulated });
-    } else if (!accumulated) {
-      bubble.textContent = '(no response)';
+    } else {
+      contentDiv.textContent = '(no response)';
     }
 
     copyBtn.addEventListener('click', () => {
